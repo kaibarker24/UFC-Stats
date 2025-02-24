@@ -1,0 +1,389 @@
+<html>
+<head>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            background: white;
+            color: darkgray;
+        }
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: black;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+        }
+        .options {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .chart {
+            margin: 40px;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+        }
+        .axis-label {
+            font-size: 12px;
+            fill: #555;
+        }
+        .dot {
+            fill: steelblue;
+            stroke: #333;
+            stroke-width: 1px;
+            cursor: pointer;
+            transition: fill 0.4s, stroke 0.4s;
+        }
+        .dot.selected {
+            fill: orange;
+            stroke: black;
+            stroke-width: 2px;
+        }
+        .tooltip {
+            position: absolute;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        .stats-box {
+            display: flex;
+            margin-top: 20px;
+            border: 10px;
+            border-color: gray;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .fighter-stats {
+            padding: 15px;
+            border-radius: 10px;
+            background: white;
+            width: 220px;
+        }
+        .fighter-stats h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #333;
+        }
+        .fighter-stats p {
+            margin: 5px 0;
+            font-size: 12px;
+            color: #555;
+        }
+        select {
+            padding: 5px;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        label {
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">UFC Fighter Stats vs Win Rates</div>
+        <div class="options">
+            <div>
+                <label for="weight-class">Select Weight Class:</label>
+                <select id="weight-class">
+                    <option value="Flyweight">Flyweight (≤ 56.7 kg)</option>
+                    <option value="Bantamweight">Bantamweight (56.8–61.29 kg)</option>
+                    <option value="Featherweight">Featherweight (61.3–65.89 kg)</option>
+                    <option value="Lightweight">Lightweight (65.9–70.39 kg)</option>
+                    <option value="Welterweight">Welterweight (70.4–77.19 kg)</option>
+                    <option value="Middleweight">Middleweight (77.2–83.99 kg)</option>
+                    <option value="Light Heavyweight">Light Heavyweight (84.0–93.9 kg)</option>
+                    <option value="Heavyweight">Heavyweight (93.1–120.2 kg)</option>
+                </select>
+            </div>
+            <div>
+                <label for="y-axis">Select Y-Axis Metric:</label>
+                <select id="y-axis">
+                    <option value="significant_striking_accuracy">Striking Accuracy</option>
+                    <option value="significant_strike_defence">Strike Defense</option>
+                    <option value="takedown_accuracy">Takedown Accuracy</option>
+                    <option value="takedown_defense">Takedown Defense</option>
+                    <option value="significant_strikes_landed_per_minute">Strikes Landed/Min</option>
+                    <option value="average_takedowns_landed_per_15_minutes">Average Takedowns Landed per 15 Minutes</option>
+                    <option value="average_submissions_attempted_per_15_minutes">Average Sub Attempts per 15 Minutes</option>
+                </select>
+            </div>
+        </div>
+        <div class="options">
+            <div>
+                <label for="fighter1">Select Fighter 1:</label>
+                <select id="fighter1">
+                    <option value="None Chosen">None Chosen</option>
+                </select>
+            </div>
+            <div>
+                <label for="fighter2">Select Fighter 2:</label>
+                <select id="fighter2">
+                    <option value="None Chosen">None Chosen</option>
+                </select>
+            </div>
+            <div>
+                <label for="fighter3">Select Fighter 3:</label>
+                <select id="fighter3">
+                    <option value="None Chosen">None Chosen</option>
+                </select>
+            </div>
+        </div>
+        <div id="scatterplot" class="chart"></div>
+        <div id="stats-boxes" class="stats-box"></div>
+    </div>
+
+    <div class="tooltip"></div>
+
+    <script>
+        const width = 800, height = 500, margin = { top: 50, right: 50, bottom: 70, left: 70 };
+        let data;
+
+        const svgScatter = d3.select("#scatterplot")
+                             .append("svg")
+                             .attr("width", width)
+                             .attr("height", height);
+
+        const tooltip = d3.select(".tooltip");
+
+        d3.csv("ufc-fighters-statistics.csv").then(csvData => {
+            data = csvData.map(d => {
+                const totalFights = +d.wins + +d.losses + +d.draws;
+                return {
+                    ...d,
+                    wins: +d.wins,
+                    losses: +d.losses,
+                    draws: +d.draws,
+                    weight_in_kg: +d.weight_in_kg,
+                    significant_striking_accuracy: +d.significant_striking_accuracy,
+                    significant_strike_defence: +d.significant_strike_defence,
+                    takedown_accuracy: +d.takedown_accuracy,
+                    takedown_defense: +d.takedown_defense,
+                    significant_strikes_landed_per_minute: +d.significant_strikes_landed_per_minute,
+                    average_takedowns_landed_per_15_minutes: +d.average_takedowns_landed_per_15_minutes,
+                    average_submissions_attempted_per_15_minutes: +d.average_submissions_attempted_per_15_minutes,
+                    win_percentage: (+d.wins / totalFights) * 100,
+                    totalFights: totalFights
+                };
+            }).filter(d => d.totalFights >= 5); 
+
+            const defaultWeightClass = "Flyweight";
+            const filteredData = filterByWeightClass(data, defaultWeightClass);
+            populateFighters(filteredData);
+            updateScatterPlot(filteredData);
+
+            d3.select("#weight-class").on("change", function() {
+                const selectedWeightClass = this.value;
+                const filteredData = filterByWeightClass(data, selectedWeightClass);
+                updateScatterPlot(filteredData);
+                populateFighters(filteredData);
+                resetFighterChoices();
+            });
+
+            d3.select("#y-axis").on("change", function() {
+                const selectedWeightClass = d3.select("#weight-class").node().value;
+                const filteredData = filterByWeightClass(data, selectedWeightClass);
+                updateScatterPlot(filteredData);
+            });
+
+            d3.selectAll("#fighter1, #fighter2, #fighter3").on("change", function() {
+                updateStatsBoxes();
+                highlightSelectedFighters();
+            });
+        });
+
+        function populateWeightClass(data) {
+            const weightClasses = ["Flyweight", "Bantamweight", "Featherweight", "Lightweight", "Welterweight", "Middleweight", "Light Heavyweight", "Heavyweight"];
+            d3.select("#weight-class")
+              .selectAll("option")
+              .data(weightClasses)
+              .enter()
+              .append("option")
+              .text(d => d);
+        }
+
+        function populateFighters(data) {
+            const fighters = data.map(d => d.name);
+            d3.select("#fighter1")
+              .selectAll("option:not(:first-child)")
+              .data(fighters)
+              .enter()
+              .append("option")
+              .text(d => d);
+
+            d3.select("#fighter2")
+              .selectAll("option:not(:first-child)")
+              .data(fighters)
+              .enter()
+              .append("option")
+              .text(d => d);
+
+            d3.select("#fighter3")
+              .selectAll("option:not(:first-child)")
+              .data(fighters)
+              .enter()
+              .append("option")
+              .text(d => d);
+        }
+
+        function filterByWeightClass(data, weightClass) {
+            const weightClasses = {
+                "Flyweight": [0, 56.79],
+                "Bantamweight": [56.8, 61.29],
+                "Featherweight": [61.3, 65.89],
+                "Lightweight": [65.9, 70.39],
+                "Welterweight": [70.4, 77.19],
+                "Middleweight": [77.2, 83.99],
+                "Light Heavyweight": [84.0, 93.9],
+                "Heavyweight": [93.1, 120.2]
+            };
+
+            const [minWeight, maxWeight] = weightClasses[weightClass];
+            return data.filter(d => d.weight_in_kg >= minWeight && d.weight_in_kg <= maxWeight);
+        }
+
+        function resetFighterChoices() {
+            d3.select("#fighter1").node().value = "None Chosen";
+            d3.select("#fighter2").node().value = "None Chosen";
+            d3.select("#fighter3").node().value = "None Chosen";
+            updateStatsBoxes();
+            highlightSelectedFighters();
+        }
+
+        function updateScatterPlot(data) {
+            const yMetric = d3.select("#y-axis").node().value;
+
+            const xScale = d3.scaleLinear()
+                             .domain([0, 100])
+                             .range([margin.left, width - margin.right]);
+
+            const yScale = d3.scaleLinear()
+                             .domain([d3.min(data, d => d[yMetric]), d3.max(data, d => d[yMetric])])
+                             .range([height - margin.bottom, margin.top]);
+
+            svgScatter.selectAll("*").remove();
+
+            svgScatter.append("g")
+                      .attr("transform", `translate(0,${height - margin.bottom})`)
+                      .call(d3.axisBottom(xScale));
+
+            svgScatter.append("g")
+                      .attr("transform", `translate(${margin.left},0)`)
+                      .call(d3.axisLeft(yScale));
+
+            svgScatter.selectAll(".dot")
+                      .data(data)
+                      .enter()
+                      .append("circle")
+                      .attr("class", "dot")
+                      .attr("cx", d => xScale(d.win_percentage))
+                      .attr("cy", d => yScale(d[yMetric]))
+                      .attr("r", 5)
+                      .on("mouseover", (event, d) => {
+                          tooltip.style("opacity", 1)
+                                 .html(`${d.name}<br>Wins: ${d.wins}, Losses: ${d.losses}`)
+                                 .style("left", `${event.pageX + 5}px`)
+                                 .style("top", `${event.pageY - 20}px`);
+                      })
+                      .on("mouseout", () => tooltip.style("opacity", 0))
+                      .on("click", (event, d) => {
+                          const fighterName = d.name;
+                          const fighterSelectors = ["#fighter1", "#fighter2", "#fighter3"];
+                          let selected = false;
+
+                          fighterSelectors.forEach(selector => {
+                              if (d3.select(selector).node().value === fighterName) {
+                                  d3.select(selector).node().value = "None Chosen"; 
+                                  selected = true;
+                              }
+                          });
+
+                          if (!selected) {
+                              for (const selector of fighterSelectors) {
+                                  if (d3.select(selector).node().value === "None Chosen") {
+                                      d3.select(selector).node().value = fighterName;
+                                      break;
+                                  }
+                              }
+                          }
+
+                          updateStatsBoxes();
+                          highlightSelectedFighters();
+                      });
+
+            svgScatter.append("text")
+                      .attr("class", "axis-label")
+                      .attr("x", width / 2)
+                      .attr("y", height - 10)
+                      .style("text-anchor", "middle")
+                      .text("Win Percentage");
+
+            svgScatter.append("text")
+                      .attr("class", "axis-label")
+                      .attr("transform", "rotate(-90)")
+                      .attr("x", -height / 2)
+                      .attr("y", 15)
+                      .style("text-anchor", "middle")
+                      .text(yMetric);
+
+            highlightSelectedFighters();
+        }
+
+        function updateStatsBoxes() {
+            const fighters = [
+                d3.select("#fighter1").node().value,
+                d3.select("#fighter2").node().value,
+                d3.select("#fighter3").node().value
+            ].filter(f => f !== "None Chosen"); 
+
+            const statsBoxes = d3.select("#stats-boxes");
+            statsBoxes.selectAll("*").remove();
+
+            fighters.forEach(fighter => {
+                const fighterData = data.find(d => d.name === fighter);
+                if (fighterData) {
+                    const statsBox = statsBoxes.append("div")
+                                              .attr("class", "fighter-stats");
+
+                    statsBox.append("h3").text(fighterData.name);
+                    statsBox.append("p").text(`Nickname: ${fighterData.nickname}`);
+                    statsBox.append("p").text(`Wins: ${fighterData.wins}`);
+                    statsBox.append("p").text(`Losses: ${fighterData.losses}`);
+                    statsBox.append("p").text(`Draws: ${fighterData.draws}`);
+                    statsBox.append("p").text(`Height: ${fighterData.height_cm} cm`);
+                    statsBox.append("p").text(`Weight: ${fighterData.weight_in_kg} kg`);
+                    statsBox.append("p").text(`Reach: ${fighterData.reach_in_cm} cm`);
+                    statsBox.append("p").text(`Strikes Landed/Min: ${fighterData.significant_strikes_landed_per_minute}`);
+                    statsBox.append("p").text(`Striking Accuracy: ${fighterData.significant_striking_accuracy}`);
+                    statsBox.append("p").text(`Strike Defense: ${fighterData.significant_strike_defence}`);
+                    statsBox.append("p").text(`Takedowns Landed/15 Min: ${fighterData.average_takedowns_landed_per_15_minutes}`);
+                    statsBox.append("p").text(`Takedown Accuracy: ${fighterData.takedown_accuracy}`);
+                    statsBox.append("p").text(`Takedown Defense: ${fighterData.takedown_defense}`);
+                    statsBox.append("p").text(`Submissions Attempted/15 Min: ${fighterData.average_submissions_attempted_per_15_minutes}`);
+                }
+            });
+        }
+
+        function highlightSelectedFighters() {
+            const selectedFighters = [
+                d3.select("#fighter1").node().value,
+                d3.select("#fighter2").node().value,
+                d3.select("#fighter3").node().value
+            ];
+
+            svgScatter.selectAll(".dot")
+                      .classed("selected", d => selectedFighters.includes(d.name));
+        }
+    </script>
+</body>
+</html>
