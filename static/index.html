@@ -176,14 +176,14 @@
 
             const defaultWeightClass = "Flyweight";
             const filteredData = filterByWeightClass(data, defaultWeightClass);
-            populateFighters(filteredData);
+            addFighters(filteredData);
             updateScatterPlot(filteredData);
 
             d3.select("#weight-class").on("change", function() {
                 const selectedWeightClass = this.value;
                 const filteredData = filterByWeightClass(data, selectedWeightClass);
                 updateScatterPlot(filteredData);
-                populateFighters(filteredData);
+                addFighters(filteredData);
                 resetFighterChoices();
             });
 
@@ -199,7 +199,7 @@
             });
         });
 
-        function populateFighters(data) {
+        function addFighters(data) {
             const fighters = data.map(d => d.name);
             d3.select("#fighter1")
               .selectAll("option:not(:first-child)")
