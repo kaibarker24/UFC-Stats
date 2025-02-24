@@ -25,6 +25,13 @@
             flex-wrap: wrap;
             justify-content: center;
         }
+        .stats-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 1200px;
+            margin-top: 20px;
+        }
         .chart {
             margin: 40px;
             background: white;
@@ -41,6 +48,7 @@
             stroke-width: 1px;
             cursor: pointer;
             transition: fill 0.4s, stroke 0.4s;
+            opacity: 75%;
         }
         .dot.selected {
             fill: orange;
@@ -55,24 +63,17 @@
             font-size: 12px;
         }
         .stats-box {
-            display: flex;
-            border: 10px;
-            border-color: gray;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        .fighter-stats {
+            width: 220px;
             padding: 15px;
             border-radius: 10px;
             background: white;
-            width: 220px;
         }
-        .fighter-stats h3 {
+        .stats-box h3 {
             margin: 0 0 10px 0;
             font-size: 16px;
             color: #333;
         }
-        .fighter-stats p {
+        .stats-box p {
             margin: 5px 0;
             font-size: 12px;
             color: #555;
@@ -131,15 +132,12 @@
                     <option value="None Chosen">None Chosen</option>
                 </select>
             </div>
-            <div>
-                <label for="fighter3">Select Fighter 3:</label>
-                <select id="fighter3">
-                    <option value="None Chosen">None Chosen</option>
-                </select>
-            </div>
         </div>
-        <div id="scatterplot" class="chart"></div>
-        <div id="stats-boxes" class="stats-box"></div>
+        <div class="stats-container">
+            <div id="stats-box-left" class="stats-box"></div>
+            <div id="scatterplot" class="chart"></div>
+            <div id="stats-box-right" class="stats-box"></div>
+        </div>
     </div>
 
     <div class="tooltip"></div>
@@ -195,24 +193,17 @@
                 updateScatterPlot(filteredData);
             });
 
-            d3.selectAll("#fighter1, #fighter2, #fighter3").on("change", function() {
+            d3.selectAll("#fighter1, #fighter2").on("change", function() {
                 updateStatsBoxes();
                 highlightSelectedFighters();
             });
         });
 
-        function populateWeightClass(data) {
-            const weightClasses = ["Flyweight", "Bantamweight", "Featherweight", "Lightweight", "Welterweight", "Middleweight", "Light Heavyweight", "Heavyweight"];
-            d3.select("#weight-class")
-              .selectAll("option")
-              .data(weightClasses)
-              .enter()
-              .append("option")
-              .text(d => d);
-        }
-
         function populateFighters(data) {
             const fighters = data.map(d => d.name);
+            d3.select("#fighter1")
+              .selectAll("option:not(:first-child)")
+              .remove(); 
             d3.select("#fighter1")
               .selectAll("option:not(:first-child)")
               .data(fighters)
@@ -222,12 +213,8 @@
 
             d3.select("#fighter2")
               .selectAll("option:not(:first-child)")
-              .data(fighters)
-              .enter()
-              .append("option")
-              .text(d => d);
-
-            d3.select("#fighter3")
+              .remove(); 
+            d3.select("#fighter2")
               .selectAll("option:not(:first-child)")
               .data(fighters)
               .enter()
@@ -254,13 +241,13 @@
         function resetFighterChoices() {
             d3.select("#fighter1").node().value = "None Chosen";
             d3.select("#fighter2").node().value = "None Chosen";
-            d3.select("#fighter3").node().value = "None Chosen";
             updateStatsBoxes();
             highlightSelectedFighters();
         }
 
         function updateScatterPlot(data) {
             const yMetric = d3.select("#y-axis").node().value;
+            const yMetricLabel = d3.select("#y-axis option:checked").text(); 
 
             const xScale = d3.scaleLinear()
                              .domain([0, 100])
@@ -294,10 +281,11 @@
                                  .style("left", `${event.pageX + 5}px`)
                                  .style("top", `${event.pageY - 20}px`);
                       })
-                      .on("mouseout", () => tooltip.style("opacity", 0))
+                      .on("mouseout", () => tooltip.style("opacity", 0)
+                    .style("pointer-events", "none"))
                       .on("click", (event, d) => {
                           const fighterName = d.name;
-                          const fighterSelectors = ["#fighter1", "#fighter2", "#fighter3"];
+                          const fighterSelectors = ["#fighter1", "#fighter2"];
                           let selected = false;
 
                           fighterSelectors.forEach(selector => {
@@ -333,51 +321,55 @@
                       .attr("x", -height / 2)
                       .attr("y", 15)
                       .style("text-anchor", "middle")
-                      .text(yMetric);
-
-            highlightSelectedFighters();
+                      .text(yMetricLabel); 
         }
 
         function updateStatsBoxes() {
-            const fighters = [
-                d3.select("#fighter1").node().value,
-                d3.select("#fighter2").node().value,
-                d3.select("#fighter3").node().value
-            ].filter(f => f !== "None Chosen"); 
+            const fighter1 = d3.select("#fighter1").node().value;
+            const fighter2 = d3.select("#fighter2").node().value;
 
-            const statsBoxes = d3.select("#stats-boxes");
-            statsBoxes.selectAll("*").remove();
+            const statsBoxLeft = d3.select("#stats-box-left");
+            const statsBoxRight = d3.select("#stats-box-right");
 
-            fighters.forEach(fighter => {
-                const fighterData = data.find(d => d.name === fighter);
+            statsBoxLeft.selectAll("*").remove();
+            statsBoxRight.selectAll("*").remove();
+
+            if (fighter1 !== "None Chosen") {
+                const fighterData = data.find(d => d.name === fighter1);
                 if (fighterData) {
-                    const statsBox = statsBoxes.append("div")
-                                              .attr("class", "fighter-stats");
-
-                    statsBox.append("h3").text(fighterData.name);
-                    statsBox.append("p").text(`Nickname: ${fighterData.nickname}`);
-                    statsBox.append("p").text(`Wins: ${fighterData.wins}`);
-                    statsBox.append("p").text(`Losses: ${fighterData.losses}`);
-                    statsBox.append("p").text(`Draws: ${fighterData.draws}`);
-                    statsBox.append("p").text(`Height: ${fighterData.height_cm} cm`);
-                    statsBox.append("p").text(`Weight: ${fighterData.weight_in_kg} kg`);
-                    statsBox.append("p").text(`Reach: ${fighterData.reach_in_cm} cm`);
-                    statsBox.append("p").text(`Strikes Landed/Min: ${fighterData.significant_strikes_landed_per_minute}`);
-                    statsBox.append("p").text(`Striking Accuracy: ${fighterData.significant_striking_accuracy}`);
-                    statsBox.append("p").text(`Strike Defense: ${fighterData.significant_strike_defence}`);
-                    statsBox.append("p").text(`Takedowns Landed/15 Min: ${fighterData.average_takedowns_landed_per_15_minutes}`);
-                    statsBox.append("p").text(`Takedown Accuracy: ${fighterData.takedown_accuracy}`);
-                    statsBox.append("p").text(`Takedown Defense: ${fighterData.takedown_defense}`);
-                    statsBox.append("p").text(`Submissions Attempted/15 Min: ${fighterData.average_submissions_attempted_per_15_minutes}`);
+                    populateStatsBox(statsBoxLeft, fighterData);
                 }
-            });
+            }
+
+            if (fighter2 !== "None Chosen") {
+                const fighterData = data.find(d => d.name === fighter2);
+                if (fighterData) {
+                    populateStatsBox(statsBoxRight, fighterData);
+                }
+            }
+        }
+
+        function populateStatsBox(container, fighterData) {
+            container.append("h3").text(fighterData.name);
+            container.append("p").text(`Wins: ${fighterData.wins}`);
+            container.append("p").text(`Losses: ${fighterData.losses}`);
+            container.append("p").text(`Draws: ${fighterData.draws}`);
+            container.append("p").text(`Height: ${fighterData.height_cm} cm`);
+            container.append("p").text(`Weight: ${fighterData.weight_in_kg} kg`);
+            container.append("p").text(`Reach: ${fighterData.reach_in_cm} cm`);
+            container.append("p").text(`Strikes Landed/Min: ${fighterData.significant_strikes_landed_per_minute}`);
+            container.append("p").text(`Striking Accuracy: ${fighterData.significant_striking_accuracy}`);
+            container.append("p").text(`Strike Defense: ${fighterData.significant_strike_defence}`);
+            container.append("p").text(`Takedowns Landed/15 Min: ${fighterData.average_takedowns_landed_per_15_minutes}`);
+            container.append("p").text(`Takedown Accuracy: ${fighterData.takedown_accuracy}`);
+            container.append("p").text(`Takedown Defense: ${fighterData.takedown_defense}`);
+            container.append("p").text(`Submissions Attempted/15 Min: ${fighterData.average_submissions_attempted_per_15_minutes}`);
         }
 
         function highlightSelectedFighters() {
             const selectedFighters = [
                 d3.select("#fighter1").node().value,
-                d3.select("#fighter2").node().value,
-                d3.select("#fighter3").node().value
+                d3.select("#fighter2").node().value
             ];
 
             svgScatter.selectAll(".dot")
